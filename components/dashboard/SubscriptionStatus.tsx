@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from 'react';
+import Link from 'next/link';
 
 export default function SubscriptionStatus({ subscription, loading: externalLoading }: { subscription: any, loading?: boolean }) {
   const [loading, setLoading] = useState(false);
@@ -26,6 +27,7 @@ export default function SubscriptionStatus({ subscription, loading: externalLoad
 
   const status = subscription?.status || 'inactive';
   const plan = subscription?.plan ? subscription.plan.charAt(0).toUpperCase() + subscription.plan.slice(1) : 'No Plan';
+  const hasStripeSubscription = !!subscription?.stripe_subscription_id;
   
   let badgeColor = 'bg-gray-200 text-gray-700 border-gray-300';
   if (status === 'active') badgeColor = 'bg-[#ECFDF5] text-success border border-[#D1FAE5]';
@@ -44,21 +46,34 @@ export default function SubscriptionStatus({ subscription, loading: externalLoad
           </span>
           <span className="font-serif text-2xl text-primary">{plan}</span>
         </div>
-        {renewalDate && status !== 'cancelled' && (
+        {renewalDate && status !== 'cancelled' && status !== 'inactive' && (
           <p className="text-sm text-text-dark font-medium mt-2">Renews on {renewalDate}</p>
         )}
         {status === 'cancelled' && renewalDate && (
           <p className="text-sm text-text-dark font-medium mt-2">Access ends on {renewalDate}</p>
         )}
+        {(status === 'inactive' && !hasStripeSubscription) && (
+          <p className="text-sm text-text-muted font-medium mt-2">Subscribe to start playing and supporting your charity.</p>
+        )}
       </div>
 
-      <button 
-        onClick={handleManageBilling}
-        disabled={loading}
-        className="bg-primary text-white font-bold py-3 px-6 rounded-full hover:scale-105 hover:bg-[#152e23] transition-all whitespace-nowrap shadow-sm"
-      >
-        {loading ? 'Redirecting...' : 'Manage billing'}
-      </button>
+      {/* Show "Subscribe Now" for users with no Stripe subscription, "Manage billing" for those who have one */}
+      {hasStripeSubscription ? (
+        <button 
+          onClick={handleManageBilling}
+          disabled={loading}
+          className="bg-primary text-white font-bold py-3 px-6 rounded-full hover:scale-105 hover:bg-[#152e23] transition-all whitespace-nowrap shadow-sm"
+        >
+          {loading ? 'Redirecting...' : 'Manage billing'}
+        </button>
+      ) : (
+        <Link
+          href="/pricing"
+          className="bg-accent text-[#1A1A1A] font-bold py-3 px-6 rounded-full hover:scale-105 transition-all whitespace-nowrap shadow-sm text-center inline-block"
+        >
+          Subscribe Now
+        </Link>
+      )}
     </div>
   );
 }
