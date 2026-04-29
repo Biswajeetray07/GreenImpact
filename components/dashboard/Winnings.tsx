@@ -68,7 +68,7 @@ export default function Winnings({ userId, loading: externalLoading }: { userId:
           </thead>
           <tbody>
             {winners.map(w => {
-              const monthStr = new Date(w.draws.month).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
+              const monthStr = w.draws?.month ? new Date(w.draws.month).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) : 'Unknown';
               return (
                 <tr key={w.id} className="border-b border-[#E5E7EB] hover:bg-[#F9FAFB] transition-colors">
                   <td className="py-4 font-medium text-text-dark">{monthStr}</td>

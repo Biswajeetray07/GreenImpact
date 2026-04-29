@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createRouteClient } from '@/lib/supabase-route';
+import { createServerClient } from '@/lib/supabase';
 import { getUser, getSubscription, isActiveSubscriber } from '@/lib/auth';
 
 export async function GET(req: Request) {
@@ -8,7 +9,8 @@ export async function GET(req: Request) {
     const userObj = await getUser(routeClient) as any;
     if (!userObj) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const supabase = createRouteClient() as any;
+    // Use service-role client for reliable reads (bypasses RLS)
+    const supabase = createServerClient() as any;
     const { data: scores, error } = await supabase
       .from('scores')
       .select('*')
@@ -39,7 +41,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Valid date is required' }, { status: 400 });
     }
 
-    const supabase = createRouteClient() as any;
+    // Use service-role client for all DB operations (bypasses RLS)
+    const supabase = createServerClient() as any;
     const sub = await getSubscription(supabase, userId);
     if (!isActiveSubscriber(sub)) {
       return NextResponse.json({ error: 'Active subscription required' }, { status: 403 });

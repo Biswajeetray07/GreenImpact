@@ -22,8 +22,8 @@ export default async function VerifyWinnerPage({ params }: { params: { id: strin
     redirect('/dashboard');
   }
 
-  const dateObj = new Date(winner.draws.month);
-  const monthString = dateObj.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+  const dateObj = winner.draws?.month ? new Date(winner.draws.month) : null;
+  const monthString = dateObj ? dateObj.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }) : 'Unknown Draw';
 
   return (
     <div className="bg-cream min-h-[calc(100vh-64px)] py-12 px-4 sm:px-6 lg:px-8">
@@ -39,11 +39,11 @@ export default async function VerifyWinnerPage({ params }: { params: { id: strin
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-10">
             <div className="bg-[#FFF8E7] p-6 rounded-[12px] border border-accent">
               <p className="text-sm font-bold text-text-dark mb-1">Match Tier</p>
-              <p className="text-3xl font-serif text-primary">{winner.tier} Matches</p>
+              <p className="text-3xl font-serif text-primary">{winner.tier || 0} Matches</p>
             </div>
             <div className="bg-[#F0F7F4] p-6 rounded-[12px] border border-success">
               <p className="text-sm font-bold text-text-dark mb-1">Prize Amount</p>
-              <p className="text-3xl font-serif text-primary">£{winner.prize_amount.toFixed(2)}</p>
+              <p className="text-3xl font-serif text-primary">£{Number(winner.prize_amount || 0).toFixed(2)}</p>
             </div>
           </div>
 

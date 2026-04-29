@@ -5,7 +5,8 @@ import { getUser } from '@/lib/auth';
 
 export async function GET(req: Request) {
   try {
-    const supabase = createRouteClient() as any;
+    // Use service-role client for public charity listing (no auth required)
+    const supabase = createServerClient() as any;
     const { searchParams } = new URL(req.url);
     const search = searchParams.get('search');
 
@@ -23,7 +24,7 @@ export async function GET(req: Request) {
     if (error) throw error;
 
     const today = new Date().toISOString();
-    const result = charities.map((charity: any) => {
+    const result = (charities || []).map((charity: any) => {
       const upcomingEvents = (charity.charity_events || []).filter(
         (e: any) => new Date(e.event_date) >= new Date(today)
       ).sort((a: any, b: any) => new Date(a.event_date).getTime() - new Date(b.event_date).getTime());

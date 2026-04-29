@@ -18,6 +18,9 @@ export async function POST(req: Request) {
 
     const amountPence = Math.round(amount * 100);
 
+    // Use request origin as fallback when NEXT_PUBLIC_APP_URL isn't set for production
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || new URL(req.url).origin;
+
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       mode: 'payment',
@@ -39,8 +42,8 @@ export async function POST(req: Request) {
         charityId,
         type: 'independent',
       },
-      success_url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard?donation=success`,
-      cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/charities/${charityId}?donation=cancelled`,
+      success_url: `${appUrl}/dashboard?donation=success`,
+      cancel_url: `${appUrl}/charities/${charityId}?donation=cancelled`,
     });
 
     return NextResponse.json({ url: session.url });

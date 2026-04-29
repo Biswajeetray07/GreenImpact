@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { createClient } from '@/lib/supabase';
 
 export default function CharityModule({ isActive, userId, loading: externalLoading }: { isActive: boolean, userId: string, loading?: boolean }) {
   const [subscription, setSubscription] = useState<any>(null);
@@ -28,7 +29,6 @@ export default function CharityModule({ isActive, userId, loading: externalLoadi
   useEffect(() => {
     const fetchSupabaseData = async () => {
       if (!userId) return;
-      const { createClient } = await import('@/lib/supabase');
       const supabase = createClient() as any;
       
       const { data: subData }: { data: any } = await supabase.from('subscriptions').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(1).single();
