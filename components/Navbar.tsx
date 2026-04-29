@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { createClient } from '@/lib/supabase';
 import { Menu, X } from 'lucide-react';
 
@@ -21,28 +21,49 @@ export default function Navbar() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  const fetchRole = useCallback(async (authId: string) => {
+    try {
+      const { data: dbUser } = await supabase.from('users').select('role').eq('auth_id', authId).single() as any;
+      if (dbUser) setRole(dbUser.role);
+    } catch {
+      // Role lookup failed, keep default
+    }
+  }, [supabase]);
+
   useEffect(() => {
-    supabase.auth.getUser().then(async ({ data }) => {
-      if (data.user) {
-        setUser(data.user);
-        const { data: dbUser } = await supabase.from('users').select('role').eq('auth_id', data.user.id).single() as any;
-        if (dbUser) setRole(dbUser.role);
+    let cancelled = false;
+
+    // Use getSession first (instant from cache), then getUser for verification
+    const initAuth = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!cancelled && session?.user) {
+          setUser(session.user);
+          fetchRole(session.user.id);
+        }
+      } catch {
+        // Silent fail — onAuthStateChange will catch any session
       }
-    });
+    };
+
+    initAuth();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (cancelled) return;
       if (session?.user) {
         setUser(session.user);
-        const { data: dbUser } = await supabase.from('users').select('role').eq('auth_id', session.user.id).single() as any;
-        if (dbUser) setRole(dbUser.role);
+        fetchRole(session.user.id);
       } else {
         setUser(null);
         setRole('subscriber');
       }
     });
 
-    return () => subscription.unsubscribe();
-  }, [supabase]);
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
+  }, [supabase, fetchRole]);
 
   const handleSignOut = async () => {
     await fetch('/api/auth/signout', { method: 'POST' });

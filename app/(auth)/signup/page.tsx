@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase';
 
 export default function Signup() {
   const router = useRouter();
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -44,7 +44,10 @@ export default function Signup() {
       setErrors({ form: error.message });
       setLoading(false);
     } else {
+      // Give the DB trigger time to create the user row before redirecting
+      await new Promise(resolve => setTimeout(resolve, 1500));
       router.push('/pricing');
+      router.refresh();
     }
   };
 

@@ -40,7 +40,17 @@ export async function middleware(request: NextRequest) {
       .eq('auth_id', user.id)
       .single()
 
-    const role = dbUser?.role || 'subscriber'
+    // If user row doesn't exist yet (race condition after signup),
+    // allow access to dashboard but skip subscription checks
+    if (!dbUser) {
+      if (path.startsWith('/admin')) {
+        return NextResponse.redirect(new URL('/dashboard', request.url))
+      }
+      // Allow dashboard access — page will handle missing data gracefully
+      return response
+    }
+
+    const role = dbUser.role || 'subscriber'
 
     if (path.startsWith('/admin') && role !== 'admin') {
       return NextResponse.redirect(new URL('/dashboard', request.url))
@@ -50,7 +60,7 @@ export async function middleware(request: NextRequest) {
       const { data: sub } = await supabase
         .from('subscriptions')
         .select('status')
-        .eq('user_id', dbUser?.id)
+        .eq('user_id', dbUser.id)
         .order('created_at', { ascending: false })
         .limit(1)
         .single()

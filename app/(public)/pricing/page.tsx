@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { createClient } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { Check, Zap } from 'lucide-react';
@@ -13,15 +13,48 @@ export default function Pricing() {
   const [loadingUser, setLoadingUser] = useState(true);
 
   useEffect(() => {
-    supabase.auth.getUser()
-      .then(({ data }) => {
-        if (data.user) setUser(data.user);
-      })
-      .catch(() => {})
-      .finally(() => setLoadingUser(false));
+    let cancelled = false;
+
+    // Use getSession first (fast, from local storage) then verify with getUser
+    const initAuth = async () => {
+      try {
+        // getSession is synchronous from cache — no lock contention
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!cancelled) {
+          if (session?.user) {
+            setUser(session.user);
+          }
+          setLoadingUser(false);
+        }
+
+        // Then do the authoritative server check in background
+        if (session?.user) {
+          const { data } = await supabase.auth.getUser();
+          if (!cancelled && data.user) {
+            setUser(data.user);
+          }
+        }
+      } catch {
+        if (!cancelled) setLoadingUser(false);
+      }
+    };
+
+    initAuth();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!cancelled) {
+        setUser(session?.user ?? null);
+        setLoadingUser(false);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
   }, [supabase]);
 
-  const handleSubscribe = async (planType: 'monthly' | 'yearly') => {
+  const handleSubscribe = useCallback(async (planType: 'monthly' | 'yearly') => {
     if (!user) {
       router.push('/signup');
       return;
@@ -44,7 +77,7 @@ export default function Pricing() {
       alert('Error initiating checkout');
       setLoadingPlan(null);
     }
-  };
+  }, [user, router]);
 
   const features = [
     'Access to Monthly Prize Draws',
@@ -84,10 +117,10 @@ export default function Pricing() {
             </ul>
             <button 
               onClick={() => handleSubscribe('monthly')}
-              disabled={loadingPlan !== null || loadingUser}
-              className={`btn-shine w-full font-bold py-4 px-4 rounded-full transition-all text-base ${loadingPlan !== null || loadingUser ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-primary text-white hover:shadow-md'}`}
+              disabled={loadingPlan !== null}
+              className={`btn-shine w-full font-bold py-4 px-4 rounded-full transition-all text-base ${loadingPlan !== null ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-primary text-white hover:shadow-md'}`}
             >
-              {loadingUser ? 'Loading...' : loadingPlan === 'monthly' ? 'Processing...' : 'Subscribe Monthly'}
+              {loadingPlan === 'monthly' ? 'Processing...' : user ? 'Subscribe Monthly' : 'Sign Up & Subscribe'}
             </button>
           </div>
 
@@ -117,10 +150,10 @@ export default function Pricing() {
             </ul>
             <button 
               onClick={() => handleSubscribe('yearly')}
-              disabled={loadingPlan !== null || loadingUser}
-              className={`btn-shine w-full font-bold py-4 px-4 rounded-full transition-all text-base ${loadingPlan !== null || loadingUser ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-accent text-[#1A1A1A] hover:shadow-md'}`}
+              disabled={loadingPlan !== null}
+              className={`btn-shine w-full font-bold py-4 px-4 rounded-full transition-all text-base ${loadingPlan !== null ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-accent text-[#1A1A1A] hover:shadow-md'}`}
             >
-              {loadingUser ? 'Loading...' : loadingPlan === 'yearly' ? 'Processing...' : 'Subscribe Yearly'}
+              {loadingPlan === 'yearly' ? 'Processing...' : user ? 'Subscribe Yearly' : 'Sign Up & Subscribe'}
             </button>
           </div>
         </div>
