@@ -4,8 +4,20 @@ import { stripe } from '@/lib/stripe';
 
 export async function POST(req: Request) {
   try {
-    const { planType, userId } = await req.json();
+    const { planType } = await req.json();
     const supabase = createRouteClient() as any;
+
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized: No valid session' }, { status: 401 });
+    }
+
+    const { data: dbUser, error: dbError } = await supabase.from('users').select('id, email').eq('auth_id', user.id).single();
+    if (dbError || !dbUser) {
+      return NextResponse.json({ error: 'User record not found' }, { status: 404 });
+    }
+    
+    const userId = dbUser.id;
 
     // 1. Check existing subscription for a customer ID
     const { data: existingSub } = await supabase
@@ -17,12 +29,8 @@ export async function POST(req: Request) {
     let customerId = existingSub?.stripe_customer_id;
 
     if (!customerId) {
-      // Get user email
-      const { data: userRecord } = await supabase.from('users').select('email').eq('id', userId).single();
-      if (!userRecord) return NextResponse.json({ error: 'User not found' }, { status: 404 });
-
       const customer = await stripe.customers.create({
-        email: userRecord.email,
+        email: dbUser.email,
         metadata: { userId },
       });
       customerId = customer.id;
@@ -53,6 +61,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ url: session.url });
   } catch (error: any) {
+    console.error('Checkout Error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
