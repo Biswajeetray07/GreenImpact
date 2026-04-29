@@ -1,27 +1,24 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { createClient } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { Check, Zap } from 'lucide-react';
 
 export default function Pricing() {
   const router = useRouter();
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
-  const [dbUser, setDbUser] = useState<any>(null);
   const [loadingUser, setLoadingUser] = useState(true);
 
   useEffect(() => {
-    supabase.auth.getUser().then(async ({ data }) => {
-      if (data.user) {
-        setUser(data.user);
-        const { data: dbData } = await supabase.from('users').select('id').eq('auth_id', data.user.id).single();
-        if (dbData) setDbUser(dbData);
-      }
-      setLoadingUser(false);
-    });
+    supabase.auth.getUser()
+      .then(({ data }) => {
+        if (data.user) setUser(data.user);
+      })
+      .catch(() => {})
+      .finally(() => setLoadingUser(false));
   }, [supabase]);
 
   const handleSubscribe = async (planType: 'monthly' | 'yearly') => {
@@ -34,7 +31,7 @@ export default function Pricing() {
       const res = await fetch('/api/stripe/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ planType, userId: dbUser?.id })
+        body: JSON.stringify({ planType })
       });
       const data = await res.json();
       if (data.url) {
