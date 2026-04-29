@@ -8,54 +8,78 @@ export async function POST(req: Request) {
     // 1. Authenticate user from cookies
     const routeClient = createRouteClient() as any;
     const { data: { user }, error: authError } = await routeClient.auth.getUser();
+
     if (authError || !user) {
+      console.error('Portal: Auth failed', authError?.message);
       return NextResponse.json({ error: 'Unauthorized: No valid session' }, { status: 401 });
     }
 
-    // 2. Get DB user record
+    // 2. Get user email from DB (service-role bypasses RLS)
     const supabase = createServerClient() as any;
-    const { data: dbUser } = await supabase
+    const { data: dbUser, error: dbErr } = await supabase
       .from('users')
       .select('id, email')
       .eq('auth_id', user.id)
       .single();
 
-    if (!dbUser) {
+    if (dbErr || !dbUser) {
+      console.error('Portal: DB user not found', dbErr?.message, 'auth_id:', user.id);
       return NextResponse.json({ error: 'User record not found' }, { status: 404 });
     }
 
-    // 3. Try to get stripe_customer_id from subscriptions table
+    console.log('Portal: Looking up Stripe customer for', dbUser.email);
+
+    // 3. Strategy A: Check subscriptions table first (fast path)
+    let customerId: string | null = null;
+
     const { data: sub } = await supabase
       .from('subscriptions')
       .select('stripe_customer_id')
       .eq('user_id', dbUser.id)
+      .not('stripe_customer_id', 'is', null)
       .order('created_at', { ascending: false })
       .limit(1)
       .single();
 
-    let customerId = sub?.stripe_customer_id;
+    if (sub?.stripe_customer_id) {
+      customerId = sub.stripe_customer_id;
+      console.log('Portal: Found customer in DB:', customerId);
+    }
 
-    // 4. Fallback: if no customer ID in DB, search Stripe by email
+    // 4. Strategy B: Search Stripe directly by email
     if (!customerId) {
-      const customers = await stripe.customers.list({
-        email: dbUser.email,
-        limit: 1,
-      });
+      console.log('Portal: DB miss, searching Stripe by email:', dbUser.email);
+      const customers = await stripe.customers.list({ email: dbUser.email, limit: 5 });
+      console.log('Portal: Stripe returned', customers.data.length, 'customers');
+
       if (customers.data.length > 0) {
         customerId = customers.data[0].id;
+        console.log('Portal: Found customer in Stripe:', customerId);
 
-        // Backfill the customer ID into subscriptions for next time
-        if (sub) {
-          await supabase
-            .from('subscriptions')
-            .update({ stripe_customer_id: customerId, updated_at: new Date().toISOString() })
-            .eq('user_id', dbUser.id);
-        }
+        // Backfill into DB for next time
+        await supabase
+          .from('subscriptions')
+          .update({ stripe_customer_id: customerId, updated_at: new Date().toISOString() })
+          .eq('user_id', dbUser.id);
+      }
+    }
+
+    // 5. Strategy C: Search Stripe by auth email (in case DB email differs)
+    if (!customerId && user.email && user.email !== dbUser.email) {
+      console.log('Portal: Trying auth email:', user.email);
+      const customers = await stripe.customers.list({ email: user.email, limit: 5 });
+      if (customers.data.length > 0) {
+        customerId = customers.data[0].id;
+        console.log('Portal: Found customer via auth email:', customerId);
       }
     }
 
     if (!customerId) {
-      return NextResponse.json({ error: 'No Stripe customer found. Please subscribe first.' }, { status: 400 });
+      console.error('Portal: No customer found anywhere for', dbUser.email);
+      return NextResponse.json(
+        { error: 'No Stripe customer found. Please subscribe from the Pricing page first.' },
+        { status: 400 }
+      );
     }
 
     const session = await stripe.billingPortal.sessions.create({
